@@ -4,6 +4,8 @@ const Randomstring = require("randomstring");
 const CryptoJS = require("crypto-js");
 const Marky = require("marky");
 const Iota = require("iota.lib.js");
+const Semaphore = require("semaphore");
+const powSemaphore = Semaphore(1); //change this number to do more simultaneous POWs
 
 
 /**
@@ -362,30 +364,33 @@ class Tanglestash {
 
     sendNewIotaTransaction(address, message) {
         return new Promise((resolve, reject) => {
-            this.iota.api.sendTransfer(
-                this.seed,
-                this.IotaTransactionDepth,
-                this.IotaTransactionMinWeightMagnitude,
-                [
-                    {
-                        'address': address,
-                        'message': message,
-                        'tag': this.ChunkTag,
-                        'value': 0,
-                    }
-                ],
-                (err, bundle) => {
-                    // TODO: Check why this sometimes doesn't reject correctly (if node is outdated)
-                    if (err) {
-                        if (err.message.includes('failed consistency check')) {
-                            reject(new NodeOutdatedError(err.message));
-                        } else {
-                            reject(new Error(err.message));
-                        }
-                    }
-                    resolve(bundle[0]);
-                }
-            );
+        	powSemaphore.take(() => {
+	            this.iota.api.sendTransfer(
+	                this.seed,
+	                this.IotaTransactionDepth,
+	                this.IotaTransactionMinWeightMagnitude,
+	                [
+	                    {
+	                        'address': address,
+	                        'message': message,
+	                        'tag': this.ChunkTag,
+	                        'value': 0,
+	                    }
+	                ],
+	                (err, bundle) => {
+	                    // TODO: Check why this sometimes doesn't reject correctly (if node is outdated)
+	                	powSemaphore.leave();
+	                    if (err) {
+	                        if (err.message.includes('failed consistency check')) {
+	                            reject(new NodeOutdatedError(err.message));
+	                        } else {
+	                            reject(new Error(err.message));
+	                        }
+	                    }
+	                    resolve(bundle[0]);
+	                }
+	            );
+        	});
         });
     }
 
